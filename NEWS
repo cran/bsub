@@ -1,3 +1,15 @@
+Changes in version 1.0.2
+* allow minites for submitting jobs
+* add `bjobs_barplot` and `bjobs_timeline` functions
+
+--------------------------------------------
+
+Changes in version 1.0.1
+* add vignettes
+* set `max = Inf` in `print.data.frame()`
+
+--------------------------------------------
+
 Changes in version 1.0.0
 
 * reformat the messages.

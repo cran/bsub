@@ -63,12 +63,22 @@
 	
 
 	packageStartupMessage(paste(msg, collapse = "\n"))
+
+	env <- globalenv()
+	if(exists(".Last", envir = env)) {
+		old = get(".Last", envir = env)
+
+		assign(".Last", function(...) {
+			old(...)
+			ssh_disconnect()
+		}, envir = env)
+	} else {
+		assign(".Last", function(...) {
+			ssh_disconnect()
+		}, envir = env)
+	}
 }
 
-
-.onDetach = function(libpath) {
-	if(!is.null(bsub_opt$ssh_session)) ssh_disconnect()
-}
 
 if(identical(topenv(), .GlobalEnv)) {
 	if(grepl("odcf|w610", Sys.info()["nodename"])) {

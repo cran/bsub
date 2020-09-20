@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+
+<html>
+
+<head>
+
+<meta charset="utf-8" />
+<meta name="generator" content="pandoc" />
+<meta http-equiv="X-UA-Compatible" content="IE=EDGE" />
+
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+
+
+
+<title>Configure bsub package</title>
+
+<script>// Pandoc 2.9 adds attributes on both header and div. We remove the former (to
+// be compatible with the behavior of Pandoc < 2.8).
+document.addEventListener('DOMContentLoaded', function(e) {
+  var hs = document.querySelectorAll("div.section[class*='level'] > :first-child");
+  var i, h, a;
+  for (i = 0; i < hs.length; i++) {
+    h = hs[i];
+    if (!/^h[1-6]$/i.test(h.tagName)) continue;  // it should be a header h1-h6
+    a = h.attributes;
+    while (a.length > 0) h.removeAttribute(a[0].name);
+  }
+});
+</script>
+<script>// Hide empty <a> tag within highlighted CodeBlock for screen reader accessibility (see https://github.com/jgm/pandoc/issues/6352#issuecomment-626106786) -->
+// v0.0.1
+// Written by JooYoung Seo (jooyoung@psu.edu) and Atsushi Yasumoto on June 1st, 2020.
+
+document.addEventListener('DOMContentLoaded', function() {
+  const codeList = document.getElementsByClassName("sourceCode");
+  for (var i = 0; i < codeList.length; i++) {
+    var linkList = codeList[i].getElementsByTagName('a');
+    for (var j = 0; j < linkList.length; j++) {
+      if (linkList[j].innerHTML === "") {
+        linkList[j].setAttribute('aria-hidden', 'true');
+      }
+    }
+  }
+});
+</script>
+
+
+<style type="text/css">code{white-space: pre;}</style>
+<style type="text/css" data-origin="pandoc">
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+    color: #aaaaaa;
+  }
+pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+code span.al { color: #ff0000; font-weight: bold; } /* Alert */
+code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
+code span.at { color: #7d9029; } /* Attribute */
+code span.bn { color: #40a070; } /* BaseN */
+code span.bu { } /* BuiltIn */
+code span.cf { color: #007020; font-weight: bold; } /* ControlFlow */
+code span.ch { color: #4070a0; } /* Char */
+code span.cn { color: #880000; } /* Constant */
+code span.co { color: #60a0b0; font-style: italic; } /* Comment */
+code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } /* CommentVar */
+code span.do { color: #ba2121; font-style: italic; } /* Documentation */
+code span.dt { color: #902000; } /* DataType */
+code span.dv { color: #40a070; } /* DecVal */
+code span.er { color: #ff0000; font-weight: bold; } /* Error */
+code span.ex { } /* Extension */
+code span.fl { color: #40a070; } /* Float */
+code span.fu { color: #06287e; } /* Function */
+code span.im { } /* Import */
+code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Information */
+code span.kw { color: #007020; font-weight: bold; } /* Keyword */
+code span.op { color: #666666; } /* Operator */
+code span.ot { color: #007020; } /* Other */
+code span.pp { color: #bc7a00; } /* Preprocessor */
+code span.sc { color: #4070a0; } /* SpecialChar */
+code span.ss { color: #bb6688; } /* SpecialString */
+code span.st { color: #4070a0; } /* String */
+code span.va { color: #19177c; } /* Variable */
+code span.vs { color: #4070a0; } /* VerbatimString */
+code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warning */
+
+</style>
+<script>
+// apply pandoc div.sourceCode style to pre.sourceCode instead
+(function() {
+  var sheets = document.styleSheets;
+  for (var i = 0; i < sheets.length; i++) {
+    if (sheets[i].ownerNode.dataset["origin"] !== "pandoc") continue;
+    try { var rules = sheets[i].cssRules; } catch (e) { continue; }
+    for (var j = 0; j < rules.length; j++) {
+      var rule = rules[j];
+      // check if there is a div.sourceCode rule
+      if (rule.type !== rule.STYLE_RULE || rule.selectorText !== "div.sourceCode") continue;
+      var style = rule.style.cssText;
+      // check if color or background-color is set
+      if (rule.style.color === '' && rule.style.backgroundColor === '') continue;
+      // replace div.sourceCode by a pre.sourceCode rule
+      sheets[i].deleteRule(j);
+      sheets[i].insertRule('pre.sourceCode{' + style + '}', j);
+    }
+  }
+})();
+</script>
+
+
+
+<style type="text/css">body {
+background-color: #fff;
+margin: 1em auto;
+max-width: 700px;
+overflow: visible;
+padding-left: 2em;
+padding-right: 2em;
+font-family: "Open Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
+font-size: 14px;
+line-height: 1.35;
+}
+#TOC {
+clear: both;
+margin: 0 0 10px 10px;
+padding: 4px;
+width: 400px;
+border: 1px solid #CCCCCC;
+border-radius: 5px;
+background-color: #f6f6f6;
+font-size: 13px;
+line-height: 1.3;
+}
+#TOC .toctitle {
+font-weight: bold;
+font-size: 15px;
+margin-left: 5px;
+}
+#TOC ul {
+padding-left: 40px;
+margin-left: -1.5em;
+margin-top: 5px;
+margin-bottom: 5px;
+}
+#TOC ul ul {
+margin-left: -2em;
+}
+#TOC li {
+line-height: 16px;
+}
+table {
+margin: 1em auto;
+border-width: 1px;
+border-color: #DDDDDD;
+border-style: outset;
+border-collapse: collapse;
+}
+table th {
+border-width: 2px;
+padding: 5px;
+border-style: inset;
+}
+table td {
+border-width: 1px;
+border-style: inset;
+line-height: 18px;
+padding: 5px 5px;
+}
+table, table th, table td {
+border-left-style: none;
+border-right-style: none;
+}
+table thead, table tr.even {
+background-color: #f7f7f7;
+}
+p {
+margin: 0.5em 0;
+}
+blockquote {
+background-color: #f6f6f6;
+padding: 0.25em 0.75em;
+}
+hr {
+border-style: solid;
+border: none;
+border-top: 1px solid #777;
+margin: 28px 0;
+}
+dl {
+margin-left: 0;
+}
+dl dd {
+margin-bottom: 13px;
+margin-left: 13px;
+}
+dl dt {
+font-weight: bold;
+}
+ul {
+margin-top: 0;
+}
+ul li {
+list-style: circle outside;
+}
+ul ul {
+margin-bottom: 0;
+}
+pre, code {
+background-color: #f7f7f7;
+border-radius: 3px;
+color: #333;
+white-space: pre-wrap; 
+}
+pre {
+border-radius: 3px;
+margin: 5px 0px 10px 0px;
+padding: 10px;
+}
+pre:not([class]) {
+background-color: #f7f7f7;
+}
+code {
+font-family: Consolas, Monaco, 'Courier New', monospace;
+font-size: 85%;
+}
+p > code, li > code {
+padding: 2px 0px;
+}
+div.figure {
+text-align: center;
+}
+img {
+background-color: #FFFFFF;
+padding: 2px;
+border: 1px solid #DDDDDD;
+border-radius: 3px;
+border: 1px solid #CCCCCC;
+margin: 0 5px;
+}
+h1 {
+margin-top: 0;
+font-size: 35px;
+line-height: 40px;
+}
+h2 {
+border-bottom: 4px solid #f7f7f7;
+padding-top: 10px;
+padding-bottom: 2px;
+font-size: 145%;
+}
+h3 {
+border-bottom: 2px solid #f7f7f7;
+padding-top: 10px;
+font-size: 120%;
+}
+h4 {
+border-bottom: 1px solid #f7f7f7;
+margin-left: 8px;
+font-size: 105%;
+}
+h5, h6 {
+border-bottom: 1px solid #ccc;
+font-size: 105%;
+}
+a {
+color: #0033dd;
+text-decoration: none;
+}
+a:hover {
+color: #6666ff; }
+a:visited {
+color: #800080; }
+a:visited:hover {
+color: #BB00BB; }
+a[href^="http:"] {
+text-decoration: underline; }
+a[href^="https:"] {
+text-decoration: underline; }
+
+code > span.kw { color: #555; font-weight: bold; } 
+code > span.dt { color: #902000; } 
+code > span.dv { color: #40a070; } 
+code > span.bn { color: #d14; } 
+code > span.fl { color: #d14; } 
+code > span.ch { color: #d14; } 
+code > span.st { color: #d14; } 
+code > span.co { color: #888888; font-style: italic; } 
+code > span.ot { color: #007020; } 
+code > span.al { color: #ff0000; font-weight: bold; } 
+code > span.fu { color: #900; font-weight: bold; } 
+code > span.er { color: #a61717; background-color: #e3d2d2; } 
+</style>
+
+
+
+
+</head>
+
+<body>
+
+
+
+
+<h1 class="title toc-ignore">Configure bsub package</h1>
+
+
+
+<p><strong>Author</strong>: Zuguang Gu ( <a href="mailto:z.gu@dkfz.de" class="email">z.gu@dkfz.de</a> )</p>
+<p><strong>Date</strong>: 2020-09-20</p>
+<hr />
+<p>The <strong>bsub</strong> package is only broadly tested on DKFZ ODCF cluster and the default configurations work fine there. It is also possible for other clusters that use LSF system to use <strong>bsub</strong> package. The following global options should be properly configured.</p>
+<p>If you have difficulties to configure <strong>bsub</strong> package for your cluster, please feel free to contact me. I am glad to help.</p>
+<div id="how-to-call-rscript-command" class="section level3">
+<h3>How to call Rscript command</h3>
+<p>You need to configure how to call the <code>Rscript</code> command, especially when you have different versions of R installed. Following is how we call <code>Rscript</code> on our cluster (we use <code>module</code> to manage the bash environment).</p>
+<div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1"></a>bsub_opt<span class="op">$</span>call_Rscript =<span class="st"> </span><span class="cf">function</span>(version) {</span>
+<span id="cb1-2"><a href="#cb1-2"></a>    <span class="kw">qq</span>(<span class="st">&quot;module load gcc/7.2.0; module load java/1.8.0_131; module load R/@{version}; Rscript&quot;</span>)</span>
+<span id="cb1-3"><a href="#cb1-3"></a>}</span></code></pre></div>
+<p>Then the different version of <code>Rscript</code> can be switched by setting different <code>bsub_opt$R_version</code> option (The value of <code>bsub_opt$R_version</code> will be passed to the <code>call_Rscript()</code> function.</p>
+<p>Similarlly, if you use <a href="https://docs.conda.io/en/latest/">conda</a> for managing different versions of software, you can also choose R with different versions by setting a proper <code>bsub_opt$call_Rscript</code>. Let assume you have conda environments for different R versions with the naming schema <code>R_$version</code> (e.g. R_3.6.0), then you can set <code>bsub_opt$call_Rscript</code> as:</p>
+<div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1"></a>bsub_opt<span class="op">$</span>call_Rscript =<span class="st"> </span><span class="cf">function</span>(version) {</span>
+<span id="cb2-2"><a href="#cb2-2"></a>    <span class="kw">qq</span>(<span class="st">&quot;conda activate R_@{version}; Rscript&quot;</span>)</span>
+<span id="cb2-3"><a href="#cb2-3"></a>}</span></code></pre></div>
+</div>
+<div id="submission-node" class="section level3">
+<h3>Submission node</h3>
+<p>The names of the nodes where the jobs are submitted can be set by <code>bsub_opt$submission_node</code> option. The value can be a vector of node names. <strong>bsub</strong> will randomly select one to connect.</p>
+<div class="sourceCode" id="cb3"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1"></a>bsub_opt<span class="op">$</span>submission_node =<span class="st"> </span>...</span></code></pre></div>
+</div>
+<div id="login-node" class="section level3">
+<h3>Login node</h3>
+<p>If you want to submit jobs, the login node should be the same as the submission node. By default, the value for <code>login_node</code> is automatically copied from <code>submission_node</code>. But there are cases when the login node is different from the submission node. For example, If you are working on your own laptop, to connect to your institute’s cluster, you need to first connect to server A to enter your institute’s network, then on server A, you continue to connect to server B which is the submission node. In this case, server A is the login node. When you explicitly set <code>login_node</code>, you should also set <code>submission_node</code> to <code>NULL</code> because in this circumstance, you cannot submit jobs:</p>
+<div class="sourceCode" id="cb4"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1"></a>bsub_opt<span class="op">$</span>login_node =<span class="st"> &quot;server A&quot;</span></span>
+<span id="cb4-2"><a href="#cb4-2"></a>bsub_opt<span class="op">$</span>submission_node =<span class="st"> </span><span class="ot">NULL</span></span></code></pre></div>
+<p>You can still query job status. Please refer to <a href="two_ssh.html">two_ssh.html</a> to see the instructions of how to configure <strong>bsub</strong> packages when you need to establish two connections to the submission node.</p>
+</div>
+<div id="username-on-the-submission-node" class="section level3">
+<h3>Username on the submission node</h3>
+<p>Your username on the submission node can be set by <code>bsub_opt$user</code>. The default value is <code>Sys.info()[&#39;user&#39;]</code>. If the username on the submission node is different, you need to explicitly set it.</p>
+<div class="sourceCode" id="cb5"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1"></a>bsub_opt<span class="op">$</span>user =<span class="st"> </span>...</span></code></pre></div>
+</div>
+<div id="bash-environment" class="section level3">
+<h3>Bash environment</h3>
+<p><code>bsub_opt$ssh_envir</code> should be properly set so that LSF binaries such as <code>bsub</code> or <code>bjobs</code> can be found. There are some environment variables initialized when logging in the bash terminal while they are not initialized with the ssh connection. Thus, some environment variables should be manually set.</p>
+<p>An example for <code>bsub_opt$ssh_envir</code> is as follows. The <code>LSF_ENVDIR</code> and <code>LSF_SERVERDIR</code> should be defined and exported.</p>
+<div class="sourceCode" id="cb6"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1"></a>bsub_opt<span class="op">$</span>ssh_envir =<span class="st"> </span><span class="kw">c</span>(<span class="st">&quot;source /etc/profile&quot;</span>,</span>
+<span id="cb6-2"><a href="#cb6-2"></a>                       <span class="st">&quot;export LSF_ENVDIR=/opt/lsf/conf&quot;</span>,</span>
+<span id="cb6-3"><a href="#cb6-3"></a>                       <span class="st">&quot;export LSF_SERVERDIR=/opt/lsf/10.1/linux3.10-glibc2.17-x86_64/etc&quot;</span>)</span></code></pre></div>
+<p>The values of these two variables can be obtained by entering following commands in your bash terminal (on the submission node):</p>
+<pre><code>echo $LSF_ENVDIR
+echo $LSF_SERVERDIR</code></pre>
+</div>
+<div id="bsub-template" class="section level3">
+<h3>bsub template</h3>
+<p>You need to define the template for calling the <code>bsub</code> command by <code>bsub_opt$bsub_template</code> option. The self-defined function should accepts following arguments:</p>
+<ul>
+<li><code>name</code> job name.</li>
+<li><code>hour</code> running time.</li>
+<li><code>memory</code> memory, in GB.</li>
+<li><code>core</code> number of cores to use.</li>
+<li><code>output</code> path of output file.</li>
+<li><code>...</code> should be added as the last argument of the function.</li>
+</ul>
+<p>The temporary bash script to submit is automatically appended as the last argument of <code>bsub</code>.</p>
+<p><em>E.g.</em>, the template on our cluster is defined as:</p>
+<div class="sourceCode" id="cb8"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1"></a>bsub_opt<span class="op">$</span>bsub_template =<span class="st"> </span><span class="cf">function</span>(name, hour, memory, core, output, ...) {</span>
+<span id="cb8-2"><a href="#cb8-2"></a>    glue<span class="op">::</span><span class="kw">glue</span>(<span class="st">&quot;bsub -J &#39;{name}&#39; -W &#39;{hour}:00&#39; -n {core} -R &#39;rusage[mem={memory}GB]&#39; -o &#39;{output}&#39;&quot;</span>)</span>
+<span id="cb8-3"><a href="#cb8-3"></a>}</span></code></pre></div>
+<p>You can use <code>glue::glue()</code> or <code>GetoptLong::qq()</code> to construct a complex string with interpolating multiple variables.</p>
+</div>
+<div id="how-to-parse-the-time-strings" class="section level3">
+<h3>How to parse the time strings</h3>
+<p>The time strings by LSF <code>bjobs</code> command might be different for different installations. The <strong>bsub</strong> package needs to convert the time strings to <code>POSIXlt</code> objects for calculating the time difference in the <code>bjobs()</code> function. Thus, if the default time string parsing fails, users need to provide a user-defined function and set with <code>bsub_opt$parse_time</code> option in <code>bsub_opt</code>. The function accepts a vector of time strings and returns a <code>POSIXlt</code> object. For example, if the time string returned from <code>bjobs</code> command is in a form of <code>Dec 1 18:00:00 2019</code>, the parsing function can be defined as:</p>
+<div class="sourceCode" id="cb9"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb9-1"><a href="#cb9-1"></a>bsub_opt<span class="op">$</span>parse_time =<span class="st"> </span><span class="cf">function</span>(x) {</span>
+<span id="cb9-2"><a href="#cb9-2"></a>    <span class="kw">as.POSIXlt</span>(x, <span class="dt">format =</span> <span class="st">&quot;%b %d %H:%M:%S %Y&quot;</span>)</span>
+<span id="cb9-3"><a href="#cb9-3"></a>}</span></code></pre></div>
+<p><strong>bsub</strong> package automatically recognizes several formats of time strings.</p>
+</div>
+
+
+
+<!-- code folding -->
+
+
+<!-- dynamically load mathjax for compatibility with self-contained -->
+<script>
+  (function () {
+    var script = document.createElement("script");
+    script.type = "text/javascript";
+    script.src  = "https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML";
+    document.getElementsByTagName("head")[0].appendChild(script);
+  })();
+</script>
+
+</body>
+</html>

@@ -1,23 +1,38 @@
 
-# == title
-# Get the dependency of current jobs
-#
-# == param
-# -job_tb A table from `bjobs`. Optional.
-#
-# == value
-# If there is no dependency of all jobs, it returns ``NULL``. If there are dependencies,
-# it returns a list of three elements:
-#
-# -``dep_mat``: a two column matrix containing dependencies from parents to children.
-# -``id2name``: a named vector containing mapping from job IDs to job names.
-# -``id2stat``: a named vector containing mapping from job IDs to job status.
-#
-# == example
-# \dontrun{
-# get_dependency()
-# }
-get_dependency = function(job_tb = NULL) {
+#' Job dependencies
+#'
+#' @param job_id A single job ID.
+#' @param job_tb A data frame from [`bjobs()`]. Internally used.
+#' @param ... Pass to [`DiagrammeR::grViz()`], such as the size of the html widget.
+#'
+#' @returns
+#' `job_dependency_all()` returns a list that contains three elements:
+#'
+#' - `dep_mat`: a two column matrix containing dependencies from parents to children.
+#' - `id2name`: a named vector containing mapping from job IDs to job names.
+#' - `id2stat`: a named vector containing mapping from job IDs to job status.
+#'
+#' `job_dependency_igraph()` returns a [`igraph::igraph`] object which contains a dependency
+#' graph induced by the input job ID.
+#' 
+#' `job_dependency_dot()` returns a DOT code for GraphViz visualization.
+#' 
+#' `job_dependency_diagram()` makes a HTML-based dependency diagram.
+#' 
+#' @rdname dependency
+#' @export
+#' @examples
+#' \dontrun{
+#' job1 = random_job()
+#' job2 = random_job()
+#' job3 = random_job(dependency = c(job1, job2))
+#' 
+#' job_dependency_all()
+#' job_dependency_igraph(job3)
+#' cat(job_dependency_dot(job3))
+#' job_dependency_diagram(job3)
+#' }
+job_dependency_all = function(job_tb = NULL) {
 
     if(is.null(job_tb)) job_tb = bjobs(status = "all", print = FALSE)
     
@@ -26,129 +41,119 @@ get_dependency = function(job_tb = NULL) {
     id2name = structure(job_tb$JOB_NAME, names = job_tb$JOBID)
     id2stat = structure(as.character(job_tb$STAT), names = job_tb$JOBID)
 
+    job_tb$DEPENDENCY = gsub("\\w+\\((.*?)\\)", "\\1", job_tb$DEPENDENCY)
     job_tb2 = job_tb[job_tb$DEPENDENCY != "-", , drop = FALSE]
     
     if(nrow(job_tb2) == 0) {
-        return(NULL)
+        dep_mat = cbind(parent = character(0),
+                     child = character(0))
+
+        return(list(dep_mat = dep_mat, id2name = id2name, id2stat = id2stat))
     }
     
     dep = lapply(strsplit(job_tb2$DEPENDENCY, " && "), function(x) {
-        gsub("^done\\( (\\d+) \\)$", "\\1", x)
+        gsub(" ", "", gsub("^done\\( (\\d+) \\)$", "\\1", x))
     })
 
     n = sapply(dep, length)
     dep_mat = cbind(parent = as.character(unlist(dep)),
                     child = as.character(rep(job_tb2$JOBID, times = n)))
 
-    all_nodes = unique(dep_mat)
-    id2name = id2name[all_nodes]; names(id2name) = all_nodes
-    id2stat = id2stat[all_nodes]; names(id2stat) = all_nodes
-
     return(list(dep_mat = dep_mat, id2name = id2name, id2stat = id2stat))
 }
 
-# == title
-# Plot the job dependency tree
-#
-# == param
-# -job_id A job ID.
-# -job_tb A table from `bjobs`. Optional.
-#
-# == value
-# No value is returned.
-#
-# == example
-# \dontrun{
-# job1 = random_job()
-# job2 = random_job()
-# job3 = random_job(dependency = c(job1, job2))
-# plot_dependency(job3)
-# }
-plot_dependency = function(job_id, job_tb = NULL) {
+#' @rdname dependency
+#' @export
+#' @import igraph
+job_dependency_igraph = function(job_id, job_tb = NULL) {
+   
+    job_id = as.character(job_id)
+    job_dep = job_dependency_all(job_tb = job_tb)
+
+    if(!job_id %in% job_dep$dep_mat) {
+        g = induced_subgraph( make_graph(c(job_id, "foo")), vids = 1)
+    } else {
+
+        g = graph.edgelist(job_dep$dep_mat)
+        g2 = graph.edgelist(job_dep$dep_mat, directed = FALSE)
+
+        dist = distances(g2, v = job_id)
+
+        # node in the connected sub-graph
+        nodes = names(which(apply(dist, 2, function(x) any(is.finite(x)))))
+
+        g = induced_subgraph(g, nodes)
+
+    }
+    V(g)$label = job_dep$id2name[V(g)$name]
+    V(g)$status = job_dep$id2stat[V(g)$name]
+    g
+}
+
+#' @param use_label Whether to use job names on the diagram?
+#' @param label_width Max number of characters for wrapping the label into lines.
+#' @rdname dependency
+#' @importFrom grDevices col2rgb rgb
+#' @export
+job_dependency_dot = function(job_id, job_tb = NULL, use_label = FALSE, label_width = 15) {
+        
+    job_id = as.character(job_id)
+    g = job_dependency_igraph(job_id, job_tb)
+
+    ## the dot code
+    color = STATUS_COL[V(g)$status]
+    color = rgb(t(col2rgb(color)/255))
+    fontsize = 10
+    fontcolor = "black"
+    penwidth = rep(1, length(color))
+    penwidth[V(g)$name == job_id] = 3
+
+    if(use_label) {
+        label = V(g)$label
+        label = gsub("_", " ", label)
+        label = sapply(label, function(x) {
+            paste(strwrap(x, width = label_width), collapse = "\\n")
+        })
+        label = paste0(label, "\\n", "(", V(g)$name, ")")
+        nodes = paste0(
+            qq("  node [fontname=Helvetical]\n"),
+            qq("  \"@{V(g)$name}\" [shape=box, color=\"@{color}\", fillcolor=\"@{color}40\", style=filled, penwidth=@{penwidth}, fontsize=@{fontsize}, fontcolor=\"@{fontcolor}\", label=\"@{label}\", fontname=\"Arial\", tooltip=\"@{V(g)$name}\"];\n", collapse = TRUE)
+        )
+    } else {
+        nodes = paste0(
+            qq("  node [fontname=Helvetical]\n"),
+            qq("  \"@{V(g)$name}\" [color=\"@{color}\", fillcolor=\"@{color}40\", style=filled, penwidth=@{penwidth}, fontsize=@{fontsize}, fontcolor=\"@{fontcolor}\", fontname=\"Arial\", tooltip=\"@{V(g)$label}\"];\n", collapse = TRUE)
+        )
+    }
+
+    edgelist = get.edgelist(g)
+    if(nrow(edgelist)) {
+        edges = paste0(
+            "  edge []\n",
+            qq("  \"@{edgelist[, 1]}\" -> \"@{edgelist[, 2]}\";\n", collapse = TRUE)
+        )
+    } else {
+        edges = ""
+    }
+
+    DOT = paste0(
+        "digraph {\n",
+        "  graph [overlap = true]\n",
+        "\n",
+        nodes,
+        "\n",
+        edges,
+        "}\n"
+    )
+
+    DOT
+}
+
+#' @rdname dependency
+#' @export
+job_dependency_diagram = function(job_id, job_tb = NULL, use_label = FALSE, label_width = 15, ...) {
 
     job_id = as.character(job_id)
-
-    job_dep = get_dependency(job_tb = NULL)
-
-    if(is.null(job_dep)) {
-        # no dependency
-        plot(NULL, xlim = c(0, 1), ylim = c(0, 1), axes = FALSE, ann = FALSE)
-        text(0.5, 0.5, qq("no dependency for job @{job_id}"))
-        return(invisible(NULL))
-    }
-
-    if(!job_id %in% names(job_dep$id2name)) {
-        # no dependency
-        plot(NULL, xlim = c(0, 1), ylim = c(0, 1), axes = FALSE, ann = FALSE)
-        text(0.5, 0.5, qq("no dependency for job @{job_id}"))
-        return(invisible(NULL))
-    }
-
-    g = igraph::graph.edgelist(job_dep$dep_mat)
-    g2 = igraph::graph.edgelist(job_dep$dep_mat, directed = FALSE)
-
-    dist = igraph::distances(g2, v = job_id)
-
-    # node in the connected sub-graph
-    nodes = names(which(apply(dist, 2, function(x) any(is.finite(x)))))
-
-    g = igraph::induced_subgraph(g, nodes)
-
-    node_id = igraph::V(g)$name
-    n_node = length(node_id)
-    node_label = job_dep$id2name[node_id]
-    node_label[is.na(node_label)] = "unknown"
-
-    l = nchar(node_label) > 50
-    if(any(l)) {
-        foo = substr(node_label[l], 1, 48)
-        foo = paste(foo, "..", sep = "")
-        node_label[l] = foo
-    }
-
-    label_width = pmax(nchar(igraph::V(g)$name), nchar(node_label)+2)
-    node_label = paste0(igraph::V(g)$name, "\n", "<", node_label, ">")
-    node_stat = job_dep$id2stat[igraph::V(g)$name]
-    node_stat[is.na(node_stat)] = "unknown"
-
-    stat_col = c("blue", "purple", "black", "red", "grey")
-    names(stat_col) = c("RUN", "PEND", "DONE", "EXIT", "unknown") 
-    node_color = stat_col[node_stat]
-    names(node_color) = node_id
-    node_fill = rgb(t(col2rgb(node_color)/255), alpha = 0.2)
-    names(node_fill) = node_id
-
-    node_width = (5*label_width - 5)/5/5 * 1.2
-    node_height = rep(1, n_node)
-
-    node_shape = rep("rectangle", n_node)
-
-    node_lwd = ifelse(node_id == job_id, 4, 1)
-
-    requireNamespace("graph")
-    g2 = new("graphAM", as.matrix(igraph::get.adjacency(g)), edgemode = "directed")
-
-    names(node_width) = node_id
-    names(node_height) = node_id
-    names(node_label) = node_id
-    names(node_shape) = node_id
-    names(node_lwd) = node_id
-    nAttr = list(width = node_width, height = node_height, label = node_label, shape = node_shape)
-    x = Rgraphviz::layoutGraph(g2, nodeAttrs = nAttr)
-    graph::nodeRenderInfo(x) = list(color = node_color, fill = node_fill, cex = 1, lwd = node_lwd)
-    
-    op = par(no.readonly = TRUE)
-    on.exit(par(op))
-
-    par(xpd = NA)
-    layout(matrix(1:2, ncol = 1), heights = c(1, "2 cm"))
-    Rgraphviz::renderGraph(x)
-
-    usr = par("usr")
-    par(mar = c(0, 0, 0, 0))
-    plot(NULL, xlim = c(0, 1), ylim = c(0, 1), axes = FALSE, ann = FALSE)
-    legend(x = 0.5, y = 0.5, xjust = 0.5, yjust = 0.5,
-        pch = 0, col = stat_col, legend = names(stat_col), 
-        pt.cex = 2, bty = "n", ncol = length(stat_col))
-    layout(1)
+    dot = job_dependency_dot(job_id, job_tb = job_tb, use_label = use_label, label_width = label_width)
+    DiagrammeR::grViz(dot, ...)
 }

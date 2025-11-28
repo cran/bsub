@@ -2,220 +2,332 @@
 suppressPackageStartupMessages(library(DT))
 suppressPackageStartupMessages(library(shiny))
 suppressPackageStartupMessages(library(GetoptLong))
-suppressPackageStartupMessages(library(shinyjqui))
+suppressPackageStartupMessages(library(DiagrammeR))
+suppressPackageStartupMessages(library(igraph))
+suppressPackageStartupMessages(library(shinyjs))
+suppressPackageStartupMessages(library(bsub))
+
+STATUS_COL = bsub:::STATUS_COL
 
 ui = fluidPage(
-    tags$style("body {
-        font-size: 1.4em;
-        width:1200px;
-        margin: auto;
-    }
-    .ui-resizable {
-        border: 1px grey solid;
-    }"),
-    tags$script(HTML(
-        paste(readLines("format.js"), collapse = "\n")
+    shinyjs::useShinyjs(),
+
+    tags$style(HTML(
+        paste(readLines("style.css"), collapse = "\n")
     )),
+    tags$script(HTML(
+        paste(readLines("app.js"), collapse = "\n")
+    )),
+
     titlePanel("LSF Job Monitor"),
-    div(htmlOutput("info"), style = "background-color:#EEFFEE; padding:5px 5px; margin: 15px 0px 15px 0px; border: 1px solid green;"),
-    p(actionButton("reload", "Manually reload"), "The monitor automatically reloads every 5 minutes."),
+
+    htmlOutput("info"),
+    actionButton("reload", "Manually reload"),
+
+    # tags$script(HTML("count_down('countdown');")),
+    
     hr(style = "border-top: 1px solid black;"),
-    div(id = "table_loading", p("Summary table is loading...", style = "font-size:20px")),
+    checkboxGroupInput("status_select", label = "Select job status: ", choices = structure(names(STATUS_COL), names = names(STATUS_COL)), selected = names(STATUS_COL), inline = TRUE),
+    div(id = "table_loading", class = "loader"),
     DT::dataTableOutput("mytable"),
-    actionButton("kill", "Kill selected jobs"),
-    # actionButton("unselect", "Unselect all jobs", onclick="$('tr.selected').removeClass('selected')"),
+    HTML('<p><button id="kill" type="button" class="btn btn-default">Kill selected jobs</button></p>'),
+
     hr(style = "border-top: 1px solid black;"),
-    p("built with ", a("bsub package", href='https://github.com/jokergoo/bsub', target='_blank'))
+    p("built with ", a(qq("the bsub package v@{installed.packages()['bsub', 'Version']}"), href='https://github.com/jokergoo/bsub', target='_blank'))
 )
+
+ENV = new.env()
+ENV$job_log = list()
+ENV$timestamp = Sys.time()
 
 server <- function(input, output, session) {
     
-    autoInvalidate <- reactiveTimer(1000 * 60*5)  # every 5 min
+    # autoInvalidate <- reactiveTimer(1000 * 60*5)  # every 5 min
     
-    observe({
-        autoInvalidate()
-    })
+    # observe({
+    #     t = autoInvalidate()
+
+    #     if(as.double(t - ENV$timestamp, units = "secs") > 10) {
+    #         message(qq("[@{format(Sys.time())}] Reloading the app."))
+    #         ENV$timestamp = t
+    #         session$reload() 
+    #     }
+    # })
         
-    job_summary_df = reactive({
+    job_summary_table = reactive({
         
-        autoInvalidate()
+        # autoInvalidate()
         
         showNotification("Fetching job summary table...", duration = 1, type = "message")
-        message(qq("[@{Sys.time()}] Fetching job summary table"))
-        df = bjobs(print = FALSE, status = "all")
-        df[order(df$JOBID, decreasing = TRUE), , drop = FALSE]
+        message(qq("[@{format(Sys.time())}] Fetching job summary table"))
+        job_tb = bjobs(print = FALSE, status = "all")
+        if(!is.null(job_tb)) {
+            job_tb[order(job_tb$JOBID, decreasing = TRUE), , drop = FALSE]
+        } else {
+            job_tb
+        }
     })
-	
+
     observeEvent(input$reload, {
-        message(qq("[@{Sys.time()}] Manually reloading the app."))
+        ENV$timestamp = Sys.time()
+        message(qq("[@{format(Sys.time())}] Reloading the app."))
         session$reload()  
     })
 
 	output$mytable = DT::renderDataTable({
 	    
-	    autoInvalidate()
+	    # autoInvalidate()
 	    
-		df = job_summary_df()
-		nr = nrow(df)
+		job_tb = job_summary_table()
+        if(is.null(job_tb)) {
+            return(datatable(data.frame(numeric(0))))
+        }
+		nr = nrow(job_tb)
 
-        job_dep = get_dependency(df)
+        job_dep = job_dependency_all(job_tb)
         
 		showNotification("Formatting job summary table...", duration = 5, type = "message")
-		df2 = df[, c("JOBID", "STAT", "JOB_NAME", "SUBMIT_TIME", "TIME_PASSED", "TIME_LEFT", "SLOTS", "MEM", "MAX_MEM")]
+		job_tb2 = job_tb[, c("JOBID", "STAT", "JOB_NAME", "QUEUE", "SUBMIT_TIME", "TIME_PASSED", "RUNTIMELIMIT", "NREQ_SLOT", "MEM", "MAX_MEM", "REQ_MEM")]
 
-		df2$STAT = factor(df2$STAT)
-        units(df2$TIME_PASSED) = "secs"; df2$TIME_PASSED = as.integer(as.numeric(df2$TIME_PASSED))
-        units(df2$TIME_LEFT) = "secs"; df2$TIME_LEFT = as.integer(as.numeric(df2$TIME_LEFT))
-        df2$MAX_MEM = bsub:::convert_to_byte(df2$MAX_MEM)
-        df2$MEM = bsub:::convert_to_byte(df2$MEM)
+		job_tb2$STAT = factor(job_tb2$STAT)
+        units(job_tb2$TIME_PASSED) = "secs"; job_tb2$TIME_PASSED = as.integer(as.numeric(job_tb2$TIME_PASSED))
+        job_tb2$RUNTIMELIMIT = job_tb2$RUNTIMELIMIT*60
+        job_tb2$MAX_MEM = bsub:::convert_to_byte(job_tb2$MAX_MEM)
+        job_tb2$MEM = bsub:::convert_to_byte(job_tb2$MEM)
+        job_tb2$REQ_MEM = job_tb2$REQ_MEM*1024*1024*1024
 
-        l = nchar(df2$JOB_NAME) > 50
+        l = nchar(job_tb2$JOB_NAME) > 50
         if(any(l)) {
-            foo = substr(df2$JOB_NAME[l], 1, 48)
+            foo = substr(job_tb2$JOB_NAME[l], 1, 48)
             foo = paste(foo, "..", sep = "")
-            df2$JOB_NAME[l] = foo
+            job_tb2$JOB_NAME[l] = foo
         }
         
-        for(i in 1:nr) {
-            df2$JOB_NAME[i] = as.character(actionLink(paste0("job_name_id_", df2$JOBID[i]), df2$JOB_NAME[i], 
-                title = "Click to see the job log", "data-toggle" = "tooltip",
-                onclick = "Shiny.onInputChange('select_link', 0);Shiny.onInputChange('select_link', this.id); var class_attr=this.parentElement.parentElement.getAttribute('class'); class_attr = /selected/.test(class_attr) ? class_attr.replace(/ selected/, '') : class_attr + ' selected'; this.parentElement.parentElement.setAttribute('class', class_attr)"))
-        }
-
-        df2$dep = ""
+        job_tb2$dep = ""
 
         ## add the dependency table
-        if(any(df2$JOBID %in% names(job_dep$id2name))) {
-            for(i in which(df2$JOBID %in% names(job_dep$id2name))) {
-                df2$dep[i] = (as.character(actionLink(paste0("job_dep_id_", df2$JOBID[i]), "Tree", 
-                        style = "border: 1px solid #009900; background-color:#009900; color: white;",
-                        title = "Click to see the dependency tree", "data-toggle" = "tooltip",
-                        onclick = "Shiny.onInputChange('select_dep', 0);Shiny.onInputChange('select_dep', this.id); var class_attr=this.parentElement.parentElement.getAttribute('class'); class_attr = /selected/.test(class_attr) ? class_attr.replace(/ selected/, '') : class_attr + ' selected'; this.parentElement.parentElement.setAttribute('class', class_attr)"))
-                )
+        if(any(job_tb2$JOBID %in% names(job_dep$id2name))) {
+            for(i in which(job_tb2$JOBID %in% job_dep$dep_mat)) {
+                job_tb2$dep[i] = "Dep"
             }
         }
 
         col_index_add = 0
-        if(all(df2$dep == "")) {
-            df2 = cbind(df2[, 1, drop = FALSE], df2[, -c(1, length(df2)), drop = FALSE])
-            colnames(df2) = c("Job ID", "Status", "Job name", "Submit time", "Time passed", "Time left", "Cores", "Memory", "Max memory")
+        if(all(job_tb2$dep == "")) {
+            job_tb2 = cbind(job_tb2[, 1, drop = FALSE], job_tb2[, -c(1, length(job_tb2)), drop = FALSE])
+            colnames(job_tb2) = c("Job ID", "Status", "Job name", "Queue", "Submit time", "Passed time", "Req time", "Slots", "Mem", "Max mem", "Req mem")
         } else {
             col_index_add = 1
-            df2 = cbind(df2[, c(1, length(df2)), drop = FALSE], df2[, -c(1, length(df2)), drop = FALSE])
-            colnames(df2) = c("Job ID", "", "Status", "Job name", "Submit time", "Time passed", "Time left", "Cores", "Memory", "Max memory")
+            job_tb2 = cbind(job_tb2[, c(1, length(job_tb2)), drop = FALSE], job_tb2[, -c(1, length(job_tb2)), drop = FALSE])
+            colnames(job_tb2) = c("Job ID", "", "Status", "Job name", "Queue", "Submit time", "Passed time", "Req time", "Slots", "Mem", "Max mem", "Req mem")
 		}
-        dt = datatable(df2, escape = FALSE, rownames = FALSE, filter = "top",
+        job_tb2[, "Submit time"] = as.character(job_tb2[, "Submit time"])
+
+        job_tb2 = job_tb2[job_tb2$Status %in% input$status_select, , drop = FALSE]
+
+        if(nrow(job_tb2) == 0) {
+            return(datatable(job_tb2, escape = FALSE, rownames = FALSE))
+        }
+        dt = datatable(job_tb2, escape = FALSE, rownames = FALSE, selection = 'none',
             options = list(
-                pageLength = 10
-            ), callback = JS(qq("table.on( 'draw', function () {
-                                $('#table_loading').hide();
-                                $('[data-toggle=\"tooltip\"]').tooltip(); 
-                                $('#mytable th').eq(@{2+col_index_add}).css('width', '300px');
-                            } );"))
+                pageLength = 25
+            ), callback = JS("
+table.on( 'draw', function () {
+    $('#table_loading').hide();
+    dt_bind_events();
+});")
         )
 
         dt %>% 
-            formatStyle(columns = "Status", color = styleEqual(c("RUN", "PEND", "DONE", "EXIT"), c("blue", "purple", "black", "red"))) %>%
             formatDate(columns = "Submit time", method = "toLocaleString") %>%
-            bsub:::formatTimeDiff(columns = c("Time passed", "Time left")) %>%
-            bsub:::formatFileSize(columns = c("Memory", "Max memory"))
+            bsub:::formatTimeDiff(columns = c("Passed time", "Req time")) %>%
+            bsub:::formatNumber(columns = c("Slots")) %>%
+            bsub:::formatFileSize(columns = c("Mem", "Max mem", "Req mem"))
 
 	})
 	
 	output$info = renderText({
 	    
-	    autoInvalidate()
+	    # autoInvalidate()
 	    
-	    df = job_summary_df()
-	    tb = table(df$STAT)
-	    txt = paste0(qq("User <b>@{bsub_opt$user}</b> has "), paste(qq("@{tb} @{names(tb)} job@{ifelse(tb == 1, '', 's')}", collapse = FALSE), collapse = ", "), qq(" within one week. Summary table was generated at @{Sys.time()}."))
-	    txt = paste0(txt, " ", as.character(actionLink("job_stats", "See job stats", 
-                title = "Click to see the job statistics", "data-toggle" = "tooltip")))
+	    job_tb = job_summary_table()
+	    tb = table(job_tb$STAT)
+	    txt = paste0(qq("User <b>@{bsub_opt$user}</b> has "), paste(qq("<span class='@{names(tb)}' onclick='list_by_status(\"@{names(tb)}\");false;' style='cursor:pointer;'>@{tb} @{names(tb)} job@{ifelse(tb == 1, '', 's')}</span>", collapse = FALSE), collapse = ", "), qq(" within one week. Summary table was generated at @{format(Sys.time())}."))
+	    txt = paste0(txt, " ", as.character(actionLink("job_stats", "See job stats")))
         HTML(txt)
     })
     
-	observeEvent(input$select_link, {
+	observeEvent(input$select_job, {
 
-        df = job_summary_df()
+        job_tb = job_summary_table()
 
-	    job_name_selected = gsub("job_name_id_", "", input$select_link)
-        job_name = df$JOB_NAME[df$JOBID == job_name_selected]
-        job_status = df$STAT[df$JOBID == job_name_selected]
-	    message(qq("[@{Sys.time()}] clicked job name @{input$select_link}"))
+	    job_id = gsub(" ", "", input$select_job)
+        job_name = job_tb$JOB_NAME[job_tb$JOBID == job_id]
+        job_status = job_tb$STAT[job_tb$JOBID == job_id]
+	    message(qq("[@{format(Sys.time())}] Click 'job @{job_id}'"))
 
-	    output$job_log = renderText({
-	        showNotification("Fetching job log...", duration = 5)
-	        message(qq("[@{Sys.time()}] Fetching job log for @{job_name_selected} <@{job_name}> @{job_status}"))
-	        log = job_log(job_name_selected, print = FALSE)
-	        paste(log, collapse = "\n")
+	    output$job_log = renderUI({
+            if(job_status %in% c("RUN", "PEND") || is.null(ENV$job_log[[job_id]])) {
+    	        showNotification("Fetching job log...", duration = 5)
+    	        message(qq("[@{format(Sys.time())}] Fetching job log for '@{job_id} <@{job_name}> @{job_status}'"))
+    	        log = job_log(job_id, print = FALSE)
+                log = gsub("<", "&lt;", log)
+                log = gsub(">", "&gt;", log)
+
+                log = reformat_log(log, job_status)
+                if(!job_status %in% c("RUN", "PEND")) {
+                    ENV$job_log[[job_id]] = log
+                }
+            } else {
+                log = ENV$job_log[[job_id]]
+                message(qq("[@{format(Sys.time())}] Fetching job log for '@{job_id} <@{job_name}> @{job_status}' from cache"))
+                
+            }
+
+	        html = paste(log, collapse = "\n")
+            html = paste0("<pre>", html, "</pre>")
+            HTML(html)
 	    })
 
+        output$job_env = renderUI({
+            log = run_cmd(qq("bjobs -env @{job_id}"))
+            names(log) = gsub("^(\\S+)=.*$", "\\1", log)
+
+            log = gsub("^(\\w+)", "<b>\\1</b>", log)
+            log = paste("<code>", log, "</code>")
+            
+            html = paste(log, collapse = "\n")
+            html = paste0("<pre>", html, "</pre>")
+             HTML(html)
+            
+        })
+
+        output$job_script = renderUI({
+            log = run_cmd(qq("bjobs -script @{job_id}"))
+            i1 = grep("^# LSBATCH: User input", log)
+            source = FALSE
+            if(log[i1+1] == "( cat <<_USER_\\SCRIPT_") {
+                i1 = i1 + 1
+                source = TRUE
+            }
+            if(source) {
+                i2 = which(log == "_USER_SCRIPT_")
+                log = log[seq(i1+1, i2-1)]
+            } else {
+                i2 = grep("^# LSBATCH: End user input", log)
+                log = log[seq(i1+1, i2-1-2)]
+            }
+            
+            log = paste("<code>", log, "</code>")
+            html = paste(log, collapse = "\n")
+            html = paste0("<pre>", html, "</pre>")
+            HTML(html)
+        })
+
 	    showModal(modalDialog(
-	        title = qq("Job log (@{job_name_selected} <@{job_name}>)"),
-	        verbatimTextOutput("job_log"),
+	        title = qq("Job log (@{job_id} <@{job_name}>, @{job_status})"),
+            if(job_status %in% c("EXIT", "unknown")) {
+                tags$p(HTML(qq("<a style='color:#337ab7;text-decoration:underline;cursor:pointer;' onclick='Shiny.onInputChange(\"select_dep\", 0);Shiny.onInputChange(\"select_dep\", @{job_id})'>Show job dependencies</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a style='color:#337ab7;text-decoration:underline;cursor:pointer;' onclick='$(\"#rerun_pipeline_output\").show();rerun_pipeline(\"@{job_id}\")'>Click here to rerun the pipeline (DONE jobs will be skipped).</a>")))
+            } else {
+                tags$p(HTML(qq("<a style='color:#337ab7;text-decoration:underline;cursor:pointer;' onclick='Shiny.onInputChange(\"select_dep\", 0);Shiny.onInputChange(\"select_dep\", @{job_id})'>Show job dependencies</a>")))
+            },
+            if(job_status %in% c("EXIT", "unknown")) {
+                HTML("<pre class='shiny-text-output noplaceholder' id='rerun_pipeline_output' style='display:hidden'></pre>")
+            } else {
+                NULL
+            },
+	        tabsetPanel(type= "tabs",
+                tabPanel("Job log", uiOutput("job_log")),
+                tabPanel("Script", uiOutput("job_script")),
+                tabPanel("Env variables", uiOutput("job_env"))
+            ),
 	        footer = actionButton("close_job_log", "Close"),
-	        easyClose = TRUE,
+	        easyClose = FALSE,
 	        size = "l"
 	    ))
 	})
 
     observeEvent(input$select_dep, {
 
-        df = job_summary_df()
+        job_tb = job_summary_table()
 
-        job_name_selected = gsub("job_dep_id_", "", input$select_dep)
-        job_name = df$JOB_NAME[df$JOBID == job_name_selected]
-        job_status = df$STAT[df$JOBID == job_name_selected]
-        message(qq("[@{Sys.time()}] clicked dependency for @{input$select_dep}"))
+        job_id = gsub(" ", "", input$select_dep)
+        job_name = job_tb$JOB_NAME[job_tb$JOBID == job_id]
+        job_status = job_tb$STAT[job_tb$JOBID == job_id]
+        message(qq("[@{format(Sys.time())}] Click dependency for 'job @{job_id}'"))
 
-        output$dependency_plot = renderPlot({
+        # test whether the pipeline can be rerun
+        g = job_dependency_igraph(job_id, job_tb)
+        all_job_ids = V(g)$name
+
+        job_tb2 = job_tb[job_tb$JOBID %in% all_job_ids, , drop = FALSE]
+        rerunable = FALSE
+        if(length(all_job_ids) == 1) {
+            if(job_tb2$STAT[1] %in% c("DONE", "EXIT", "unknown")) {
+                rerunable = TRUE
+            }
+        }
+        if(all(job_tb2$STAT %in% c("DONE", "EXIT", "unknown"))) {
+            rerunable = TRUE
+        }
+        if(all(job_tb2$STAT == "DONE")) {
+            rerunable = FALSE
+        }
+
+        output$dependency_plot = renderGrViz({
             showNotification("Generating job dependency tree...", duration = 5)
-            message(qq("[@{Sys.time()}] Generating job dependency tree @{job_name_selected} <@{job_name}> @{job_status}"))
-            plot_dependency(job_name_selected)
+            message(qq("[@{format(Sys.time())}] Generating job dependency tree '@{job_id} <@{job_name}> @{job_status}'"))
+            dot = job_dependency_dot(job_id, job_tb, use_label = TRUE)
+            grViz(dot, width = 868, height = 600)
         })
         
         showModal(modalDialog(
-            title = qq("Job dependency (@{job_name_selected} <@{job_name}>)"),
-            jqui_resizable(plotOutput("dependency_plot", width = "auto", height = "600px")),
+            title = qq("Job dependency (@{job_id} <@{job_name}>)"),
+            if(rerunable) tags$p(HTML(qq("<a style='color:#337ab7;text-decoration:underline;cursor:pointer;' onclick='$(\"#rerun_pipeline_output\").show();rerun_pipeline(\"@{job_id}\")'>Some jobs are failed, click here to rerun the pipeline (DONE jobs will be skipped).</a>"))) else NULL,
+            if(rerunable) HTML("<pre class='shiny-text-output noplaceholder' id='rerun_pipeline_output' style='display:hidden'></pre>") else NULL,
+            HTML("<p id='dep_info'>If you cannot click on the nodes, move your mouse outside of the diagram and then move in.</p>"),
+            grVizOutput("dependency_plot", width = "868px", height = "600px"),
+            tags$script("
+                $('#dependency_plot').on('mouseenter', function(e) {
+                    gviz_add_events()
+                })"
+            ),
+            HTML("<p><center><b>Legend:</b> <span class='RUN'>RUN</span> <span class='PEND'>PEND</span> <span class='DONE'>DONE</span> <span class='EXIT'>EXIT</span> <span class='unknown'>unknown</span></center></p>"),
             footer = actionButton("close_job_dep", "Close"),
-            easyClose = TRUE,
+            easyClose = FALSE,
             size = "l"
         ))
     })
 
     observeEvent(input$close_job_log, {
-        output$job_log = NULL
+        output$job_log = renderUI({pre("loading...")})
+        output$job_env = renderUI({pre("loading...")})
+        output$job_script = renderUI({pre("loading...")})
         removeModal()
     })
 
     observeEvent(input$close_job_dep, {
-        output$dependency_plot = NULL
         removeModal()
     })
 
-    observeEvent(input$mytable_rows_selected, {
-        selected_row = input$mytable_rows_selected
-        if(length(selected_row) == 0) {
-            message(qq("[@{Sys.time()}] No row is selected"))
-        } else {
-            message(qq("[@{Sys.time()}] @{length(selected_row)} rows are selected"))
-        }
-    })
-    
-    observeEvent(input$kill, {
-        selected_row = input$mytable_rows_selected
-        tb = job_summary_df()
-        if(length(selected_row) == 0) {
+    observeEvent(input$kill_job_id, {
+        
+        job_id = input$kill_job_id
+        job_id = gsub("@.*$", "", job_id)
+        job_id = strsplit(job_id, ";")[[1]]
+        tb = job_summary_table()
+
+        if(length(job_id) == 0) {
             output$kill_job_info = renderText({
                 "No job was selected."
             })
             showModal(modal_kill_nothing)
         } else {
-            tb = tb[input$mytable_rows_selected, , drop = FALSE]
+            tb = tb[tb$JOBID %in% job_id, , drop = FALSE]
             killing_job_id = tb$JOBID[tb$STAT %in% c("RUN", "PEND")]
             if(length(killing_job_id) == 0) {
                 output$kill_job_info = renderText({
-                    "No RUN/PEND job is selected."
+                    "No RUN/PEND job was selected."
                 })
                 showModal(modal_kill_nothing)
             } else {
@@ -228,9 +340,10 @@ server <- function(input, output, session) {
                 showModal(modalDialog(
                     title = "Kill jobs",
                     checkboxGroupInput("killing_job_id", "Kill following jobs?", m[m %in% killing_job_id], selected = killing_job_id),
+                    HTML("<pre class='shiny-text-output noplaceholder' id='kill_job_output' style='display:hidden'></pre>"),
                     footer = list(
                         actionButton("kill_job_cancel", "Cancel"),
-                        actionButton("kill_job_confirm", "Kill them!")
+                        HTML('<button id="kill_job_confirm" type="button" class="btn btn-default action-button">Kill</button>')
                     )
                 ))
             }
@@ -243,12 +356,20 @@ server <- function(input, output, session) {
     
     observeEvent(input$kill_job_confirm, {
         killing_job_id = input$killing_job_id
-        showNotification(qq("Killing @{length(killing_job_id)} jobs..."), duration = 5)
-        message(qq("[@{Sys.time()}] Killing jobs: @{paste(killing_job_id, collapse=', ')}"))
-        bkill(killing_job_id)
-        removeModal()
-        message(qq("[@{Sys.time()}] sleep 5s before reloading the app"))
-        Sys.sleep(5)
+        showNotification(qq("Kill jobs"), duration = 5)
+        withCallingHandlers({
+            shinyjs::html("kill_job_output", "")
+            for(id in killing_job_id) {
+                message(qq("Kill job @{id}"))
+                try(bkill(id), silent = TRUE)
+            }
+            for(sec in 10:1) {
+                message(qq("Reload the app (sleep @{sec} seconds)"))
+                Sys.sleep(1)
+            }
+        }, message = function(m) {
+            shinyjs::html(id = "kill_job_output", html = m$message, add = TRUE)
+        })
         session$reload()
     })
     
@@ -258,30 +379,30 @@ server <- function(input, output, session) {
 
     observeEvent(input$job_stats, {
 
-        df = job_summary_df()
+        job_tb = job_summary_table()
 
-        message(qq("[@{Sys.time()}] query global job statistics"))
+        message(qq("[@{format(Sys.time())}] query global job statistics"))
 
         output$job_barplot = renderPlot({
-            showNotification("Generating job barplot...", duration = 5)
-            message(qq("[@{Sys.time()}] Generating job barplot"))
-            bjobs_barplot(df = df)
+            showNotification("Generating job barplot...", duration = 2)
+            message(qq("[@{format(Sys.time())}] generating job barplot"))
+            bjobs_barplot(job_tb = job_tb)
         })
 
         output$job_timeline = renderPlot({
-            showNotification("Generating job timeline...", duration = 5)
-            message(qq("[@{Sys.time()}] Generating job timeline"))
-            bjobs_timeline(df = df)
+            showNotification("Generating job timeline...", duration = 2)
+            message(qq("[@{format(Sys.time())}] generating job timeline"))
+            bjobs_timeline(job_tb = job_tb)
         })
         
         showModal(modalDialog(
             title = qq("Job statistics"),
             p(h4("Number of jobs per day")),
-            jqui_resizable(plotOutput("job_barplot", width = "600px", height = "400px")),
+            plotOutput("job_barplot", width = "760px", height = "600px"),
             p(h4("Duration of jobs")),
-            jqui_resizable(plotOutput("job_timeline", width = "600px", height = "400px")),
+            plotOutput("job_timeline", width = "760px", height = "600px"),
             footer = actionButton("close_job_stats", "Close"),
-            easyClose = TRUE,
+            easyClose = FALSE,
             size = "l"
         ))
     })
@@ -291,6 +412,25 @@ server <- function(input, output, session) {
         output$job_timeline = NULL
         removeModal()
     })
+
+    observeEvent(input$rerun_pipeline, {
+        job_id = input$rerun_pipeline_job_id
+        showNotification(qq("rerun pipeline by @{job_id}..."), duration = 5)
+
+        withCallingHandlers({
+            shinyjs::html("rerun_pipeline_output", "")
+            pipeline_rerun(job_id)
+            for(sec in 10:1) {
+                message(qq("Reload the app (sleep @{sec} seconds)"))
+                Sys.sleep(1)
+            }
+        },
+        message = function(m) {
+            shinyjs::html(id = "rerun_pipeline_output", html = m$message, add = TRUE)
+        })
+
+        session$reload()
+    })
 }
 
 modal_kill_nothing = modalDialog(
@@ -299,5 +439,33 @@ modal_kill_nothing = modalDialog(
     footer =  actionButton("kill_no_job", "OK"),
     easyClose = TRUE
 )
+
+reformat_log = function(log, status) {
+    if(status == "EXIT") {
+        ind = which(grepl("\\berror\\b|\\bfail|Exited with exit code", log, ignore.case = TRUE) & !grepl("^#", log))
+        if(length(ind)) {
+            log[ind] = paste0("<span style='color:#e41a1c;font-weight:bold;text-decoration:underline;'>", log[ind], "</span>")
+        }
+    }
+    if(status == "DONE") {
+        ind = grep("Successfully completed", log, ignore.case = TRUE)
+        if(length(ind)) {
+            log[ind] = paste0("<span style='color:#377eb8;font-weight:bold;text-decoration:underline;'>", log[ind], "</span>")
+        }
+    }
+    if(status == "RUN") {
+        ind = grep("is still running", log)
+        if(length(ind)) {
+            log[ind] = paste0("<span style='color:darkgreen;font-weight:bold;text-decoration:underline;'>", log[ind], "</span>")
+        }
+    }
+    if(status == "PEND") {
+        ind = grep("pending", log)
+        if(length(ind)) {
+            log[ind] = paste0("<span style='color:#ff7f00;font-weight:bold;text-decoration:underline;'>", log[ind], "</span>")
+        }
+    }
+    paste("<code>", log, "</code>")
+}
 
 shinyApp(ui, server)

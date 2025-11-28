@@ -1,0 +1,98 @@
+body {
+    font-size: 1.3em;
+    width:1400px;
+    margin: auto;
+}
+table.dataTable tbody th, table.dataTable tbody td {
+    padding: 2px 4px;
+}
+.ui-resizable {
+    border: 1px grey solid;
+}
+.job_checkbox {
+    vertical-align: text-bottom;
+}
+
+.RUN {
+    background-color: darkgreen;
+    padding: 1px 4px;
+    border-radius: 4px;
+    color: white;
+}
+
+.DONE {
+    background-color: #377eb8;
+    padding: 1px 4px;
+    border-radius: 4px;
+    color: white;
+}
+
+.EXIT{
+    background-color: #e41a1c;
+    padding: 1px 4px;
+    border-radius: 4px;
+    color: white;
+}
+
+.PEND{
+    background-color: #ff7f00;
+    padding: 1px 4px;
+    border-radius: 4px;
+    color: white;
+}
+
+.unknown{
+    background-color: grey;
+    padding: 1px 4px;
+    border-radius: 4px;
+    color: white;
+}
+
+
+#info {
+    padding: 8px 8px;
+    background-color: #EEEEEE;
+    border-radius: 4px;
+    margin-bottom:10px;
+}
+
+pre {
+    counter-reset: line-numbering;
+}
+
+code:before {
+    content: counter(line-numbering);
+    counter-increment: line-numbering;
+    padding-right: 1em;
+    width: 1.5em;
+    text-align: right;
+    opacity: 0.5;
+}
+#mytable tr td.dt-right:first-child {
+    width: 80px;
+}
+
+.modal-content {
+    width: 900px;
+}
+
+.loader {
+  border: 16px solid #f3f3f3;
+  border-radius: 50%;
+  border-top: 16px solid #3498db;
+  width: 120px;
+  height: 120px;
+  -webkit-animation: spin 2s linear infinite; /* Safari */
+  animation: spin 2s linear infinite;
+}
+
+/* Safari */
+@-webkit-keyframes spin {
+  0% { -webkit-transform: rotate(0deg); }
+  100% { -webkit-transform: rotate(360deg); }
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}

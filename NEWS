@@ -1,3 +1,42 @@
+Changes in version 2.0.6
+
+* `bsub_script()`: allows to set `working_dir`.
+
+-------------------------------------
+
+Changes in version 2.0.4
+
+* minor changes.
+
+--------------------------------------
+
+Changes in version 2.0.0
+
+* greatly improved the web monitor
+* add functions to rerun failed jobs
+
+---------------------------------------
+
+Changes in version 1.1.4
+
+* improved the monitor
+* add `dep_dot()` function
+
+----------------------------------------
+
+Changes in version 1.1.3
+
+* fixed a bug in `bsub_chunk()` when `variables` is set, the code is not sent to the cluster.
+
+----------------------------------------
+
+Changes in version 1.1.1
+
+* add `clear_history()`
+* use `codetools::findGlobals()` to automatically identify "global variables" used in the code block.
+
+-----------------------------------------
+
 Changes in version 1.1.0
 
 * move vignettes out of the package.

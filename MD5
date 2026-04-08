@@ -1,7 +1,7 @@
-489957f5ea7ae391ec837b91cdc0c008 *DESCRIPTION
+d0ec0056ac147b8868471f3bc501c5fd *DESCRIPTION
 b80aa5a0233cbd0d997b3f34ccb22a9d *LICENSE
 8bcfbecc33822123b0e815d67fc0c2f1 *NAMESPACE
-bfbee94a04277bbe9120f68dc01257fb *NEWS
+66af70f611fea1efc21d70232296d1aa *NEWS
 8d2ac64e7011866b07b6b690f1a941b8 *R/bjobs.R
 8e2f078825e80ee0a5a30e0bb08d1802 *R/bsub.R
 102dc742340535c265ec9188eb79d91c *R/clean.R
@@ -19,13 +19,13 @@ ccf20081751f922986d8a84b29e11df2 *R/run_cmd.R
 0c1c1ffe40aaba63d577f3021a232cf2 *R/status.R
 f152c8c67568fd0c30f5ad591ed5d9d7 *R/utils.R
 a2920d37417f4c18be17d3510c253ee9 *R/zzz.R
-6ed476c22579d8fec8ee807c80cb4a6e *build/vignette.rds
+adbe789897ef404f275476e87cabf042 *build/vignette.rds
 536b0f0f04d21fe504e2e7aa54df780d *inst/app/app.R
 884a6a2deebc251a8a016e5584b5fee7 *inst/app/app.js
 13d96bb846bbf969bb0e873d06ffdff0 *inst/app/style.css
 b7370523f0c844a0de5719464dc6cbde *inst/bsub_test/bsub_test.R
 8ae8c36dac806ebea8e6ddd703cad44f *inst/doc/bsub.Rmd
-ec062d6aa498b9ef4f8895ba13e28f51 *inst/doc/bsub.html
+2d1c5bc87964107af6942acb631449dc *inst/doc/bsub.html
 14c0ae570d7bac983180cb0b2a5acb27 *man/bconf.Rd
 69d870369c42465f61df5b8bd7fc973e *man/bjobs.Rd
 c61aa6df5d1f10348549c9c4aed806b2 *man/bjobs_reset_timestamp.Rd
